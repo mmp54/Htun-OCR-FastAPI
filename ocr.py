@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import tensorflow as tf
 import joblib
+import rendering
 
 # ================= CONTRAST STRETCH =================
 def contrast_stretch(gray):
@@ -81,51 +82,60 @@ def segment_characters(lines):
     return chars_list
 
 def run_OCR(image_path):
+    result = ""
+    try:
+        # LOAD MODEL 
+        model = tf.keras.models.load_model(
+            "Htun_ocr_cnn_best_model.h5"
+        )
 
-    # LOAD MODEL 
-    model = tf.keras.models.load_model(
-        "Htun_ocr_cnn_best_model.h5"
-    )
+        # LOAD Label Encoder 
+        label_encoder = joblib.load(
+            "label_encoder.pkl"
+        )
 
-    # LOAD Label Encoder 
-    label_encoder = joblib.load(
-        "label_encoder.pkl"
-    )
+        # # Number of classes
+        # num_classes = len(label_encoder.classes_)
+        # print("Number of classes:", num_classes)
+        
+        # Preprocessing and Segmenting 
+        image = cv2.imread(image_path)
+        binary_img = preprocess_image(image)
+        lines = segment_lines(binary_img)
+        chars_list = segment_characters(lines)
 
-    # # Number of classes
-    # num_classes = len(label_encoder.classes_)
-    # print("Number of classes:", num_classes)
-    
-    # Preprocessing and Segmenting 
-    image = cv2.imread(image_path)
-    binary_img = preprocess_image(image)
-    lines = segment_lines(binary_img)
-    chars_list = segment_characters(lines)
+        # print("Number of Lines: ", len(lines))
+        # for chars in chars_list:
+        #     i = 1
+        #     print("Line ", i, ":", len(chars))
 
-    # print("Number of Lines: ", len(lines))
-    # for chars in chars_list:
-    #     i = 1
-    #     print("Line ", i, ":", len(chars))
+        # Doing OCR  
+        ocr_results = []
+        for chars in chars_list:
 
-    # Doing OCR  
-    ocr_results = []
-    for chars in chars_list:
+            line_text = ""
 
-        line_text = ""
+            for char_img in chars:
+                resized = cv2.resize(char_img, (32, 32))
+                resized = resized / 255.0
+                input_img = np.expand_dims(resized, axis=(0, -1))
+                pred = model.predict(input_img, verbose=0)
+                label = label_encoder.inverse_transform([np.argmax(pred)])[0]
+                line_text += label
 
-        for char_img in chars:
-            resized = cv2.resize(char_img, (32, 32))
-            resized = resized / 255.0
-            input_img = np.expand_dims(resized, axis=(0, -1))
-            pred = model.predict(input_img, verbose=0)
-            label = label_encoder.inverse_transform([np.argmax(pred)])[0]
-            line_text += label
+            line_text_tmp = rendering.reorder_myanmar_text(line_text)
+            ocr_results.append(line_text_tmp)
 
-        ocr_results.append(line_text)
+        result = "\n".join(ocr_results)
+        
+    except:
+        result = "Sorry, this Image cannot be done OCR."
 
-    result = "\n".join(ocr_results)
     return result
 
+# testing = run_OCR("test.jpg")
+# with open("myanmar_reordering.txt", "w", encoding="utf-8") as file:
+#     file.write("Reordered Text: " + testing)
 
 
 

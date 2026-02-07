@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+import requests
 
-app = FastAPI()
+url = "https://htun-ocr-fastapi-2.onrender.com/ocr"
+files = {"file": open("test.jpg", "rb")}  # replace test.jpg with your image
 
-@app.get("/")
-def root():
-    return {"status": "working"}
+r = requests.post(url, files=files)
+print(r.json())
