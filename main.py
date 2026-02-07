@@ -1,11 +1,24 @@
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
+import uuid
 
 from ocr import run_OCR
 
 app = FastAPI()
+
+# -----------------------------
+# CORS (VERY IMPORTANT)
+# -----------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],   # later you can restrict this
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def home():
@@ -14,19 +27,23 @@ def home():
 @app.post("/ocr")
 async def ocr_image(file: UploadFile = File(...)):
 
-    # Save uploaded image
-    image_path = f"temp_{file.filename}"
-    with open(image_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Unique temp filename (safe for multi users)
+    temp_name = f"/tmp/{uuid.uuid4()}_{file.filename}"
 
-    # Run OCR
-    text = run_OCR(image_path)
+    try:
+        # Save uploaded image
+        with open(temp_name, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # Delete temp image
-    os.remove(image_path)
+        # Run OCR
+        text = run_OCR(temp_name)
 
-    return JSONResponse({
-        "filename": file.filename,
-        "text": text
-    })
+        return {
+            "filename": file.filename,
+            "text": text
+        }
 
+    finally:
+        # Cleanup
+        if os.path.exists(temp_name):
+            os.remove(temp_name)
